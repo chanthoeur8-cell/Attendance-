@@ -14,7 +14,7 @@
         .btn-checkin { background-color: #28a745; color: white; }
         .btn-checkout { background-color: #dc3545; color: white; }
         .btn-send { background-color: #6f42c1; color: white; margin-top: 15px; }
-        .hidden { display: none; }
+        .hidden { display: none !important; } /* បន្ថែម !important ដើម្បីធានាថាវាបាត់ពិតមែន */
         .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; background: #f0f0f0; margin-bottom: 15px; font-weight: bold; color: #333; }
     </style>
 </head>
@@ -47,6 +47,8 @@
             <button class="btn-send" onclick="submitAttendance()">បញ្ជូនទិន្នន័យ</button>
             <button style="background:none; color: gray; font-size: 13px;" onclick="cancelAction()">បោះបង់</button>
         </div>
+        
+        <button style="background:none; color: #ccc; font-size: 10px; margin-top: 20px;" onclick="clearData()">ចុះឈ្មោះឡើងវិញ</button>
     </div>
 </div>
 
@@ -57,59 +59,72 @@
     let currentStatus = "";
     let isReasonRequired = false;
 
+    // ដំណើរការភ្លាមៗពេលបើក Web
     window.onload = function() {
-        const user = JSON.parse(localStorage.getItem('staff_info'));
-        if (user) { showAttendanceUI(user); }
+        checkUserStatus();
     };
 
+    function checkUserStatus() {
+        const storedData = localStorage.getItem('staff_info');
+        if (storedData) {
+            const user = JSON.parse(storedData);
+            showAttendanceUI(user);
+        } else {
+            // បើមិនទាន់មានទិន្នន័យ ឱ្យបង្ហាញ Setup Form
+            document.getElementById('setup-form').classList.remove('hidden');
+            document.getElementById('attendance-section').classList.add('hidden');
+            document.getElementById('title').innerText = "ចុះឈ្មោះដំបូង";
+        }
+    }
+
     function saveProfile() {
-        const name = document.getElementById('fullname').value;
-        const phone = document.getElementById('phone').value;
-        const role = document.getElementById('role').value;
+        const name = document.getElementById('fullname').value.trim();
+        const phone = document.getElementById('phone').value.trim();
+        const role = document.getElementById('role').value.trim();
+        
         if (!name || !phone || !role) return Swal.fire('សូមបំពេញឱ្យគ្រប់!', '', 'warning');
-        localStorage.setItem('staff_info', JSON.stringify({ name, phone, role }));
-        showAttendanceUI({ name, phone, role });
+        
+        const userInfo = { name, phone, role };
+        localStorage.setItem('staff_info', JSON.stringify(userInfo));
+        showAttendanceUI(userInfo);
     }
 
     function showAttendanceUI(user) {
+        // បិទ Form ចុះឈ្មោះ និង បើកកន្លែង Scan វត្តមាន
         document.getElementById('setup-form').classList.add('hidden');
         document.getElementById('attendance-section').classList.remove('hidden');
+        
         document.getElementById('title').innerText = "ស្កែនវត្តមាន";
         document.getElementById('display-name').innerText = user.name;
         document.getElementById('display-role').innerText = "តួនាទី៖ " + user.role;
     }
 
-    // --- Logic សម្រាប់ការ Check In ---
     function handleCheckIn() {
         const now = new Date();
         const hour = now.getHours();
         const minute = now.getMinutes();
         
-        // ម៉ោង 7:30 ព្រឹក គឺ (hour=7, minute=30)
-        // បើលើសពីម៉ោង 7:30 (ឧទាហរណ៍ 7:31 ឬ 8:00) ត្រូវបំពេញមូលហេតុ
-        if (hour > 7 || (hour === 7 && minute >= 30)) {
+        // លើសម៉ោង 7:30 ព្រឹក ត្រូវដាក់មូលហេតុ
+        if (hour > 7 || (hour === 7 && minute > 30)) {
             isReasonRequired = true;
             prepareSubmission('ចូលយឺត (Late In)', 'អ្នកមកយឺត! សូមបញ្ជាក់មូលហេតុ៖');
         } else {
             isReasonRequired = false;
             currentStatus = "ចូលធ្វើការ (Check In)";
-            submitAttendance(); // បញ្ជូនភ្លាមដោយមិនបាច់សួរ
+            submitAttendance(); 
         }
     }
 
-    // --- Logic សម្រាប់ការ Check Out ---
     function handleCheckOut() {
         const now = new Date();
         const hour = now.getHours();
-
-        // ចេញមុនម៉ោង 5 ល្ងាច (17:00)
         if (hour < 17) {
             isReasonRequired = true;
             prepareSubmission('ចេញមុន (Early Out)', 'អ្នកចេញមុនម៉ោង! សូមបញ្ជាក់មូលហេតុ៖');
         } else {
             isReasonRequired = false;
             currentStatus = "ចេញពីធ្វើការ (Check Out)";
-            submitAttendance(); // បញ្ជូនភ្លាម
+            submitAttendance(); 
         }
     }
 
@@ -127,7 +142,7 @@
     }
 
     function submitAttendance() {
-        const reason = document.getElementById('reason').value;
+        const reason = document.getElementById('reason').value.trim();
         if (isReasonRequired && !reason) {
             return Swal.fire('សូមបំពេញមូលហេតុ!', '', 'error');
         }
@@ -149,11 +164,30 @@
 
         fetch(url).then(res => {
             if (res.ok) {
-                Swal.fire('ជោគជ័យ!', 'ទិន្នន័យត្រូវបានកត់ត្រា', 'success').then(() => location.reload());
+                Swal.fire('ជោគជ័យ!', 'ទិន្នន័យត្រូវបានកត់ត្រា', 'success').then(() => {
+                    // បន្ទាប់ពីជោគជ័យ ត្រឡប់ទៅផ្ទាំងដើមវិញ
+                    cancelAction();
+                });
             } else {
-                Swal.fire('Error', 'Chat ID ឬ Token មិនត្រឹមត្រូវ', 'error');
+                Swal.fire('Error', 'ការបញ្ជូនមានបញ្ហា', 'error');
             }
         }).catch(() => Swal.fire('Error', 'បញ្ហាអ៊ីនធឺណិត', 'error'));
+    }
+
+    // មុខងារសម្រាប់លុបទិន្នន័យចោល បើចង់ប្តូរឈ្មោះអ្នកប្រើ
+    function clearData() {
+        Swal.fire({
+            title: 'តើអ្នកចង់ចុះឈ្មោះថ្មីមែនទេ?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'បាទ/ចាស',
+            cancelButtonText: 'ទេ'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                localStorage.removeItem('staff_info');
+                location.reload();
+            }
+        });
     }
 </script>
 
