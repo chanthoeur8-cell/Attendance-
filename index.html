@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ប្រព័ន្ធស្កែនវត្តមាន - Attendance System</title>
+    <title>ប្រព័ន្ធស្កែនវត្តមាន - Mikid International School</title>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body { font-family: 'Khmer OS Battambang', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #eef2f3; margin: 0; }
         .container { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
-        input, select, textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
+        input, textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
         button { width: 100%; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s; }
         .btn-main { background-color: #007bff; color: white; margin-top: 10px; }
         .btn-checkin { background-color: #28a745; color: white; }
         .btn-checkout { background-color: #dc3545; color: white; }
         .btn-send { background-color: #6f42c1; color: white; margin-top: 15px; }
         .hidden { display: none; }
-        .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; background: #f0f0f0; margin-bottom: 15px; font-weight: bold; }
+        .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; background: #f0f0f0; margin-bottom: 15px; font-weight: bold; color: #333; }
     </style>
 </head>
 <body>
@@ -26,7 +26,7 @@
     <div id="setup-form">
         <input type="text" id="fullname" placeholder="ឈ្មោះពេញ">
         <input type="tel" id="phone" placeholder="លេខទូរស័ព្ទ">
-        <input type="text" id="role" placeholder="តួនាទី (ឧទាហរណ៍៖ IT)">
+        <input type="text" id="role" placeholder="តួនាទី (ឧទាហរណ៍៖ គ្រូបង្រៀន)">
         <button class="btn-main" onclick="saveProfile()">រក្សាទុកទិន្នន័យ</button>
     </div>
 
@@ -35,47 +35,40 @@
         <div style="color: #666; font-size: 14px; margin-bottom: 20px;" id="display-role"></div>
         
         <div id="action-buttons">
-            <button class="btn-checkin" onclick="prepareSubmission('ចូលធ្វើការ (Check In)')">Check In</button>
+            <button class="btn-checkin" onclick="handleCheckIn()">Check In</button>
             <div style="height: 10px;"></div>
-            <button class="btn-checkout" onclick="prepareSubmission('ចេញពីធ្វើការ (Check Out)')">Check Out</button>
+            <button class="btn-checkout" onclick="handleCheckOut()">Check Out</button>
         </div>
 
         <div id="reason-section" class="hidden">
             <hr>
-            <h4 id="status-label"></h4>
-            <textarea id="reason" rows="3" placeholder="សូមបញ្ជាក់មូលហេតុនៅទីនេះ..."></textarea>
-            <button class="btn-send" onclick="submitAttendance()">ផ្ញើទៅ Telegram</button>
+            <h4 id="status-label" style="color: #dc3545;"></h4>
+            <textarea id="reason" rows="3" placeholder="សូមបញ្ជាក់មូលហេតុ..."></textarea>
+            <button class="btn-send" onclick="submitAttendance()">បញ្ជូនទិន្នន័យ</button>
             <button style="background:none; color: gray; font-size: 13px;" onclick="cancelAction()">បោះបង់</button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- កន្លែងដាក់ Token របស់អ្នក ---
     const TELEGRAM_TOKEN = '8242266919:AAGE6uMJ_-UvM-3KBZkJVFhJyTLvcTVW5tQ'; 
     const CHAT_ID = '-1003584563383'; 
 
     let currentStatus = "";
+    let isReasonRequired = false;
 
     window.onload = function() {
         const user = JSON.parse(localStorage.getItem('staff_info'));
-        if (user) {
-            showAttendanceUI(user);
-        }
+        if (user) { showAttendanceUI(user); }
     };
 
     function saveProfile() {
         const name = document.getElementById('fullname').value;
         const phone = document.getElementById('phone').value;
         const role = document.getElementById('role').value;
-
-        if (!name || !phone || !role) {
-            return Swal.fire('សូមបំពេញឱ្យគ្រប់!', '', 'warning');
-        }
-
-        const userData = { name, phone, role };
-        localStorage.setItem('staff_info', JSON.stringify(userData));
-        showAttendanceUI(userData);
+        if (!name || !phone || !role) return Swal.fire('សូមបំពេញឱ្យគ្រប់!', '', 'warning');
+        localStorage.setItem('staff_info', JSON.stringify({ name, phone, role }));
+        showAttendanceUI({ name, phone, role });
     }
 
     function showAttendanceUI(user) {
@@ -86,12 +79,45 @@
         document.getElementById('display-role').innerText = "តួនាទី៖ " + user.role;
     }
 
-    // មុខងារបង្ហាញប្រអប់មូលហេតុ
-    function prepareSubmission(status) {
+    // --- Logic សម្រាប់ការ Check In ---
+    function handleCheckIn() {
+        const now = new Date();
+        const hour = now.getHours();
+        const minute = now.getMinutes();
+        
+        // ម៉ោង 7:30 ព្រឹក គឺ (hour=7, minute=30)
+        // បើលើសពីម៉ោង 7:30 (ឧទាហរណ៍ 7:31 ឬ 8:00) ត្រូវបំពេញមូលហេតុ
+        if (hour > 7 || (hour === 7 && minute >= 30)) {
+            isReasonRequired = true;
+            prepareSubmission('ចូលយឺត (Late In)', 'អ្នកមកយឺត! សូមបញ្ជាក់មូលហេតុ៖');
+        } else {
+            isReasonRequired = false;
+            currentStatus = "ចូលធ្វើការ (Check In)";
+            submitAttendance(); // បញ្ជូនភ្លាមដោយមិនបាច់សួរ
+        }
+    }
+
+    // --- Logic សម្រាប់ការ Check Out ---
+    function handleCheckOut() {
+        const now = new Date();
+        const hour = now.getHours();
+
+        // ចេញមុនម៉ោង 5 ល្ងាច (17:00)
+        if (hour < 17) {
+            isReasonRequired = true;
+            prepareSubmission('ចេញមុន (Early Out)', 'អ្នកចេញមុនម៉ោង! សូមបញ្ជាក់មូលហេតុ៖');
+        } else {
+            isReasonRequired = false;
+            currentStatus = "ចេញពីធ្វើការ (Check Out)";
+            submitAttendance(); // បញ្ជូនភ្លាម
+        }
+    }
+
+    function prepareSubmission(status, label) {
         currentStatus = status;
         document.getElementById('action-buttons').classList.add('hidden');
         document.getElementById('reason-section').classList.remove('hidden');
-        document.getElementById('status-label').innerText = "បញ្ជាក់មូលហេតុសម្រាប់ " + status;
+        document.getElementById('status-label').innerText = label;
     }
 
     function cancelAction() {
@@ -102,40 +128,32 @@
 
     function submitAttendance() {
         const reason = document.getElementById('reason').value;
-
-        if (!reason) {
-            return Swal.fire('សូមបំពេញមូលហេតុ!', 'អ្នកត្រូវតែបញ្ជាក់មូលហេតុមុននឹងបន្ត', 'error');
+        if (isReasonRequired && !reason) {
+            return Swal.fire('សូមបំពេញមូលហេតុ!', '', 'error');
         }
 
         const user = JSON.parse(localStorage.getItem('staff_info'));
-        const time = new Date().toLocaleString('en-GB', { hour12: true });
+        const time = new Date().toLocaleString('km-KH', { hour12: true });
 
-        // បង្កើតសារសម្រាប់ផ្ញើទៅ Telegram
-        let message = `🔔 **ការជូនដំណឹងវត្តមាន**\n`;
-        message += `--------------------------\n`;
+        let message = `🔔 **វត្តមានបុគ្គលិក**\n`;
         message += `👤 **ឈ្មោះ៖** ${user.name}\n`;
-        message += `📞 **លេខទូរស័ព្ទ៖** ${user.phone}\n`;
         message += `💼 **តួនាទី៖** ${user.role}\n`;
         message += `📍 **ស្ថានភាព៖** ${currentStatus}\n`;
-        message += `📝 **មូលហេតុ៖** ${reason}\n`;
         message += `⏰ **ម៉ោង៖** ${time}\n`;
-        message += `--------------------------`;
+        if (reason) message += `📝 **មូលហេតុ៖** ${reason}\n`;
+        message += `📞 **ទូរស័ព្ទ៖** ${user.phone}`;
 
         const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${encodeURIComponent(message)}&parse_mode=Markdown`;
 
-        Swal.fire({ title: 'កំពុងបញ្ជូន...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+        Swal.fire({ title: 'កំពុងបញ្ជូន...', didOpen: () => { Swal.showLoading(); } });
 
         fetch(url).then(res => {
             if (res.ok) {
-                Swal.fire('ជោគជ័យ!', 'វត្តមានរបស់អ្នកត្រូវបានកត់ត្រា', 'success').then(() => {
-                    location.reload(); 
-                });
+                Swal.fire('ជោគជ័យ!', 'ទិន្នន័យត្រូវបានកត់ត្រា', 'success').then(() => location.reload());
             } else {
-                Swal.fire('បរាជ័យ', 'មិនអាចផ្ញើទិន្នន័យបានទេ សូមឆែក Bot Token!', 'error');
+                Swal.fire('Error', 'Chat ID ឬ Token មិនត្រឹមត្រូវ', 'error');
             }
-        }).catch(err => {
-            Swal.fire('Error', 'មានបញ្ហាអ៊ីនធឺណិត', 'error');
-        });
+        }).catch(() => Swal.fire('Error', 'បញ្ហាអ៊ីនធឺណិត', 'error'));
     }
 </script>
 
