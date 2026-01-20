@@ -14,7 +14,7 @@
         .btn-checkin { background-color: #28a745; color: white; }
         .btn-checkout { background-color: #dc3545; color: white; }
         .btn-send { background-color: #6f42c1; color: white; margin-top: 15px; }
-        .hidden { display: none !important; } /* បន្ថែម !important ដើម្បីធានាថាវាបាត់ពិតមែន */
+        .hidden { display: none !important; }
         .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; background: #f0f0f0; margin-bottom: 15px; font-weight: bold; color: #333; }
     </style>
 </head>
@@ -59,7 +59,6 @@
     let currentStatus = "";
     let isReasonRequired = false;
 
-    // ដំណើរការភ្លាមៗពេលបើក Web
     window.onload = function() {
         checkUserStatus();
     };
@@ -67,10 +66,8 @@
     function checkUserStatus() {
         const storedData = localStorage.getItem('staff_info');
         if (storedData) {
-            const user = JSON.parse(storedData);
-            showAttendanceUI(user);
+            showAttendanceUI(JSON.parse(storedData));
         } else {
-            // បើមិនទាន់មានទិន្នន័យ ឱ្យបង្ហាញ Setup Form
             document.getElementById('setup-form').classList.remove('hidden');
             document.getElementById('attendance-section').classList.add('hidden');
             document.getElementById('title').innerText = "ចុះឈ្មោះដំបូង";
@@ -81,7 +78,6 @@
         const name = document.getElementById('fullname').value.trim();
         const phone = document.getElementById('phone').value.trim();
         const role = document.getElementById('role').value.trim();
-        
         if (!name || !phone || !role) return Swal.fire('សូមបំពេញឱ្យគ្រប់!', '', 'warning');
         
         const userInfo = { name, phone, role };
@@ -90,10 +86,8 @@
     }
 
     function showAttendanceUI(user) {
-        // បិទ Form ចុះឈ្មោះ និង បើកកន្លែង Scan វត្តមាន
         document.getElementById('setup-form').classList.add('hidden');
         document.getElementById('attendance-section').classList.remove('hidden');
-        
         document.getElementById('title').innerText = "ស្កែនវត្តមាន";
         document.getElementById('display-name').innerText = user.name;
         document.getElementById('display-role').innerText = "តួនាទី៖ " + user.role;
@@ -101,10 +95,12 @@
 
     function handleCheckIn() {
         const now = new Date();
+        const timeString = now.toLocaleString('km-KH', { hour12: true });
+        localStorage.setItem('last_checkin_time', timeString);
+
         const hour = now.getHours();
         const minute = now.getMinutes();
         
-        // លើសម៉ោង 7:30 ព្រឹក ត្រូវដាក់មូលហេតុ
         if (hour > 7 || (hour === 7 && minute > 30)) {
             isReasonRequired = true;
             prepareSubmission('ចូលយឺត (Late In)', 'អ្នកមកយឺត! សូមបញ្ជាក់មូលហេតុ៖');
@@ -143,19 +139,28 @@
 
     function submitAttendance() {
         const reason = document.getElementById('reason').value.trim();
-        if (isReasonRequired && !reason) {
-            return Swal.fire('សូមបំពេញមូលហេតុ!', '', 'error');
-        }
+        if (isReasonRequired && !reason) return Swal.fire('សូមបំពេញមូលហេតុ!', '', 'error');
 
         const user = JSON.parse(localStorage.getItem('staff_info'));
-        const time = new Date().toLocaleString('km-KH', { hour12: true });
+        const checkInTime = localStorage.getItem('last_checkin_time');
+        const currentTime = new Date().toLocaleString('km-KH', { hour12: true });
 
-        let message = `🔔 **វត្តមានបុគ្គលិក**\n`;
+        let message = `📊 **របាយការណ៍វត្តមានបុគ្គលិក**\n`;
         message += `👤 **ឈ្មោះ៖** ${user.name}\n`;
         message += `💼 **តួនាទី៖** ${user.role}\n`;
-        message += `📍 **ស្ថានភាព៖** ${currentStatus}\n`;
-        message += `⏰ **ម៉ោង៖** ${time}\n`;
+        message += `----------------------------\n`;
+
+        if (currentStatus.includes("Check Out") || currentStatus.includes("Early Out")) {
+            message += `✅ **ម៉ោងចូល៖** ${checkInTime || 'មិនមានទិន្នន័យ'}\n`;
+            message += `🚪 **ម៉ោងចេញ៖** ${currentTime}\n`;
+            message += `📍 **ស្ថានភាព៖** ${currentStatus}\n`;
+        } else {
+            message += `✅ **ស្ថានភាព៖** ${currentStatus}\n`;
+            message += `⏰ **ម៉ោងចូល៖** ${currentTime}\n`;
+        }
+
         if (reason) message += `📝 **មូលហេតុ៖** ${reason}\n`;
+        message += `----------------------------\n`;
         message += `📞 **ទូរស័ព្ទ៖** ${user.phone}`;
 
         const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${encodeURIComponent(message)}&parse_mode=Markdown`;
@@ -164,32 +169,27 @@
 
         fetch(url).then(res => {
             if (res.ok) {
-                Swal.fire('ជោគជ័យ!', 'ទិន្នន័យត្រូវបានកត់ត្រា', 'success').then(() => {
-                    // បន្ទាប់ពីជោគជ័យ ត្រឡប់ទៅផ្ទាំងដើមវិញ
-                    cancelAction();
-                });
+                Swal.fire('ជោគជ័យ!', 'របាយការណ៍ត្រូវបានផ្ញើ', 'success').then(() => cancelAction());
             } else {
-                Swal.fire('Error', 'ការបញ្ជូនមានបញ្ហា', 'error');
+                Swal.fire('Error', 'ការផ្ញើមានបញ្ហា', 'error');
             }
         }).catch(() => Swal.fire('Error', 'បញ្ហាអ៊ីនធឺណិត', 'error'));
     }
 
-    // មុខងារសម្រាប់លុបទិន្នន័យចោល បើចង់ប្តូរឈ្មោះអ្នកប្រើ
     function clearData() {
         Swal.fire({
-            title: 'តើអ្នកចង់ចុះឈ្មោះថ្មីមែនទេ?',
+            title: 'ចុះឈ្មោះថ្មី?',
             icon: 'question',
             showCancelButton: true,
-            confirmButtonText: 'បាទ/ចាស',
+            confirmButtonText: 'បាទ',
             cancelButtonText: 'ទេ'
         }).then((result) => {
             if (result.isConfirmed) {
-                localStorage.removeItem('staff_info');
+                localStorage.clear();
                 location.reload();
             }
         });
     }
 </script>
-
 </body>
 </html>
